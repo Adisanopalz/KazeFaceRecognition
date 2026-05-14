@@ -1,1 +1,473 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KazeFaceRecognition - Pencari Orang Hilang</title>
+    <!-- Memuat Tailwind CSS untuk styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        kaze: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            900: '#134e4a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Memuat face-api.js dari unpkg (CDN) -->
+    <script defer src="https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        /* Gaya khusus untuk memastikan canvas menutupi gambar dengan tepat */
+        .image-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+        }
+        #uploadedImage {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.5rem; /* Sesuai dengan rounded-lg tailwind */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Agar klik tembus ke elemen di bawahnya */
+        }
+        
+        /* Animasi loading sederhana */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #14b8a6; /* kaze-500 */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans flex flex-col">
 
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-2 text-kaze-600">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-8 h-8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                </svg>
+                <h1 class="text-xl font-bold tracking-tight">Kaze<span class="text-slate-800">FaceRecognition</span></h1>
+            </div>
+            <nav>
+                <span class="text-sm bg-kaze-100 text-kaze-900 py-1 px-3 rounded-full font-medium">BETA System</span>
+            </nav>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-5xl mx-auto px-4 py-8 w-full grid grid-cols-1 md:grid-cols-3 gap-8">
+        
+        <!-- Kolom Kiri: Input & Status -->
+        <div class="md:col-span-1 space-y-6">
+            
+            <!-- Panel Info Aplikasi -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <h2 class="text-lg font-semibold mb-2">Tentang Sistem</h2>
+                <p class="text-sm text-slate-600 mb-4">
+                    Unggah foto untuk mencari kecocokan dengan database simulasi orang hilang kami. Sistem menggunakan AI browser-based (face-api.js) untuk memproses gambar secara lokal demi privasi.
+                </p>
+                
+                <!-- Status Bar -->
+                <div id="systemStatus" class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg text-sm border border-slate-200">
+                    <div id="statusIcon" class="loader"></div>
+                    <div>
+                        <p class="font-medium text-slate-800" id="statusTitle">Memuat Model AI...</p>
+                        <p class="text-xs text-slate-500" id="statusDesc">Harap tunggu, mungkin butuh beberapa saat.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Database Simulasi -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 hidden" id="databasePanel">
+                <h2 class="text-lg font-semibold mb-3">Database Target (Simulasi)</h2>
+                <p class="text-xs text-slate-500 mb-4">Untuk keperluan demo, sistem mencari kecocokan dengan wajah-wajah berikut:</p>
+                <div class="grid grid-cols-3 gap-2" id="mockDatabaseImages">
+                    <!-- Gambar akan diisi oleh JS -->
+                </div>
+            </div>
+
+            <!-- Panel Upload -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100 hidden" id="uploadPanel">
+                <h2 class="text-lg font-semibold mb-4">Mulai Pencarian</h2>
+                
+                <label for="imageUpload" class="cursor-pointer group block">
+                    <div class="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center transition-colors group-hover:border-kaze-500 group-hover:bg-kaze-50">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 mx-auto text-slate-400 group-hover:text-kaze-500 mb-3">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                        </svg>
+                        <span class="block text-sm font-medium text-slate-700">Pilih Foto atau Seret ke sini</span>
+                        <span class="block text-xs text-slate-500 mt-1">Mendukung JPG, PNG (Max 5MB)</span>
+                    </div>
+                    <input type="file" id="imageUpload" class="hidden" accept="image/*">
+                </label>
+                
+                <button id="resetBtn" class="mt-4 w-full py-2 px-4 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors hidden">
+                    Ulangi Pencarian
+                </button>
+            </div>
+            
+            <!-- Result Summary -->
+            <div id="resultSummary" class="bg-kaze-50 p-6 rounded-xl border border-kaze-200 hidden">
+                <h3 class="text-lg font-semibold text-kaze-900 mb-2">Hasil Analisis</h3>
+                <div id="resultContent" class="text-sm text-kaze-800">
+                    <!-- Isi hasil akan diupdate JS -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Kolom Kanan: Viewer -->
+        <div class="md:col-span-2 bg-slate-100 rounded-xl border border-slate-200 overflow-hidden flex items-center justify-center min-h-[400px] relative">
+            
+            <!-- Placeholder saat kosong -->
+            <div id="viewerPlaceholder" class="text-center p-8 text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-20 h-20 mx-auto mb-4 opacity-50">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                </svg>
+                <p>Area Tinjauan Foto</p>
+                <p class="text-sm">Silakan unggah foto dari panel sebelah kiri.</p>
+            </div>
+
+            <!-- Container Gambar dan Canvas Overlay -->
+            <div id="imageViewerContainer" class="image-container hidden p-4 w-full h-full flex items-center justify-center">
+                <div class="relative inline-block max-w-full">
+                    <img id="uploadedImage" src="" alt="Uploaded">
+                    <canvas id="overlay"></canvas>
+                </div>
+            </div>
+            
+            <!-- Processing Overlay (Spinner) -->
+            <div id="processingOverlay" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex flex-col items-center justify-center hidden z-20 text-white">
+                <div class="loader mb-4 border-t-white border-white/20"></div>
+                <p class="font-medium animate-pulse">Menganalisis Wajah...</p>
+            </div>
+
+        </div>
+
+    </main>
+
+    <footer class="bg-white border-t border-slate-200 mt-auto py-6">
+        <div class="max-w-5xl mx-auto px-4 text-center text-sm text-slate-500">
+            &copy; 2026 KazeFaceRecognition. Demo aplikasi pencocokan wajah di browser menggunakan face-api.js.
+            <br>
+            <span class="text-xs text-slate-400 mt-2 block">Catatan: Ini adalah simulasi client-side. Tidak ada data yang dikirim ke server.</span>
+        </div>
+    </footer>
+
+    <script>
+        // State Aplikasi
+        let faceMatcher = null;
+        let isModelsLoaded = false;
+        
+        // Element DOM
+        const statusIcon = document.getElementById('statusIcon');
+        const statusTitle = document.getElementById('statusTitle');
+        const statusDesc = document.getElementById('statusDesc');
+        const systemStatus = document.getElementById('systemStatus');
+        const uploadPanel = document.getElementById('uploadPanel');
+        const databasePanel = document.getElementById('databasePanel');
+        const imageUpload = document.getElementById('imageUpload');
+        const uploadedImage = document.getElementById('uploadedImage');
+        const overlay = document.getElementById('overlay');
+        const viewerPlaceholder = document.getElementById('viewerPlaceholder');
+        const imageViewerContainer = document.getElementById('imageViewerContainer');
+        const processingOverlay = document.getElementById('processingOverlay');
+        const mockDatabaseImages = document.getElementById('mockDatabaseImages');
+        const resultSummary = document.getElementById('resultSummary');
+        const resultContent = document.getElementById('resultContent');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // URL Model Face-API dari repositori publik (raw github)
+        // Kita gunakan versi kecil agar cepat dimuat
+        const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+
+        // Data Mock: Daftar orang hilang yang disimulasikan
+        // Kita menggunakan gambar placeholder publik dengan label tertentu
+        const mockLabels = [
+            { name: "Andi Saputra", url: "https://xsgames.co/randomusers/assets/avatars/male/1.jpg" },
+            { name: "Budi Santoso", url: "https://xsgames.co/randomusers/assets/avatars/male/10.jpg" },
+            { name: "Siti Aminah", url: "https://xsgames.co/randomusers/assets/avatars/female/5.jpg" },
+            { name: "Dewi Lestari", url: "https://xsgames.co/randomusers/assets/avatars/female/12.jpg" }
+        ];
+
+        async function loadModels() {
+            try {
+                // Memuat model yang dibutuhkan
+                // SSD Mobilenet V1 (Deteksi wajah)
+                // FaceLandmark68Net (Fitur wajah)
+                // FaceRecognitionNet (Pembuatan deskriptor wajah)
+                await Promise.all([
+                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+                
+                statusTitle.innerText = "Membangun Database...";
+                statusDesc.innerText = "Memproses wajah dari data simulasi.";
+                
+                await initMockDatabase();
+                
+            } catch (error) {
+                console.error("Gagal memuat model:", error);
+                setUIStatus('error', 'Gagal Memuat AI', 'Pastikan koneksi internet stabil. ' + error.message);
+            }
+        }
+
+        async function initMockDatabase() {
+            const labeledFaceDescriptors = [];
+            
+            for (const person of mockLabels) {
+                try {
+                    // Tampilkan di UI Panel Kiri
+                    const imgEl = document.createElement('img');
+                    imgEl.src = person.url;
+                    imgEl.alt = person.name;
+                    imgEl.title = person.name;
+                    imgEl.className = "w-full aspect-square object-cover rounded-md border border-slate-200";
+                    imgEl.crossOrigin = "anonymous"; // Penting untuk mencegah error CORS saat menggambar ke canvas
+                    mockDatabaseImages.appendChild(imgEl);
+
+                    // Buat image HTML element dari URL untuk diproses face-api
+                    const img = await faceapi.fetchImage(person.url);
+                    
+                    // Deteksi wajah tunggal dan ekstrak deskriptor (fitur wajah berbentuk array angka)
+                    const detections = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                    
+                    if (detections) {
+                        // Simpan label dan deskriptor
+                        labeledFaceDescriptors.push(
+                            new faceapi.LabeledFaceDescriptors(person.name, [detections.descriptor])
+                        );
+                    } else {
+                        console.warn(`Wajah tidak terdeteksi pada gambar ${person.name}`);
+                    }
+                } catch (err) {
+                    console.error(`Gagal memproses gambar mock ${person.name}`, err);
+                }
+            }
+
+            if (labeledFaceDescriptors.length > 0) {
+                // Buat FaceMatcher dengan threshold jarak tertentu (0.6 biasanya baik)
+                // Semakin kecil threshold, semakin ketat pencocokannya.
+                faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6);
+                
+                isModelsLoaded = true;
+                setUIStatus('success', 'Sistem Siap', `Database termuat (${labeledFaceDescriptors.length} profil).`);
+                
+                // Tampilkan panel UI
+                uploadPanel.classList.remove('hidden');
+                databasePanel.classList.remove('hidden');
+            } else {
+                setUIStatus('error', 'Database Kosong', 'Gagal memproses gambar simulasi.');
+            }
+        }
+
+        function setUIStatus(type, title, desc) {
+            statusTitle.innerText = title;
+            statusDesc.innerText = desc;
+            
+            statusIcon.className = ''; // reset
+            systemStatus.className = 'flex items-center gap-3 p-3 rounded-lg text-sm border';
+
+            if (type === 'success') {
+                statusIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-emerald-500"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clip-rule="evenodd" /></svg>`;
+                systemStatus.classList.add('bg-emerald-50', 'border-emerald-200');
+            } else if (type === 'error') {
+                statusIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-red-500"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-1.72 6.97a.75.75 0 1 0-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 1 0 1.06 1.06L12 13.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L13.06 12l1.72-1.72a.75.75 0 1 0-1.06-1.06L12 10.94l-1.72-1.72Z" clip-rule="evenodd" /></svg>`;
+                systemStatus.classList.add('bg-red-50', 'border-red-200');
+            } else {
+                // Loading
+                statusIcon.className = 'loader border-t-kaze-500';
+                systemStatus.classList.add('bg-slate-50', 'border-slate-200');
+            }
+        }
+
+        imageUpload.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            if (!isModelsLoaded || !faceMatcher) {
+                alert("Model AI belum siap. Harap tunggu.");
+                return;
+            }
+
+            // Validasi file
+            if (!file.type.startsWith('image/')) {
+                alert("Harap unggah file gambar yang valid.");
+                return;
+            }
+
+            // Bersihkan hasil sebelumnya
+            resetUIForNewImage();
+
+            // Tampilkan gambar yang diunggah
+            const imgUrl = URL.createObjectURL(file);
+            uploadedImage.src = imgUrl;
+
+            // Tunggu gambar dirender di DOM untuk mendapatkan dimensi aslinya
+            uploadedImage.onload = async () => {
+                viewerPlaceholder.classList.add('hidden');
+                imageViewerContainer.classList.remove('hidden');
+                processingOverlay.classList.remove('hidden');
+
+                try {
+                    await processUploadedImage();
+                } catch (error) {
+                    console.error("Error memproses gambar:", error);
+                    alert("Terjadi kesalahan saat menganalisis gambar.");
+                } finally {
+                    processingOverlay.classList.add('hidden');
+                    resetBtn.classList.remove('hidden');
+                }
+            }
+        });
+
+        async function processUploadedImage() {
+            // Cocokkan ukuran canvas overlay dengan gambar yang diunggah
+            const displaySize = { width: uploadedImage.width, height: uploadedImage.height };
+            faceapi.matchDimensions(overlay, displaySize);
+
+            // Deteksi SEMUA wajah dalam gambar, landmarks (mata, hidung, mulut), dan deskriptornya
+            const detections = await faceapi.detectAllFaces(uploadedImage)
+                                           .withFaceLandmarks()
+                                           .withFaceDescriptors();
+
+            // Jika tidak ada wajah terdeteksi
+            if (detections.length === 0) {
+                showSummaryMessage('Tidak Ditemukan', 'Sistem tidak dapat mendeteksi wajah apapun dalam foto yang diunggah.');
+                return;
+            }
+
+            // Sesuaikan koordinat deteksi dengan ukuran gambar yang ditampilkan
+            const resizedDetections = faceapi.resizeResults(detections, displaySize);
+
+            // Bersihkan canvas
+            const ctx = overlay.getContext('2d');
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+            let matchFoundCount = 0;
+            let summaryHTML = `<ul class="space-y-2">`;
+
+            // Proses setiap wajah yang terdeteksi
+            resizedDetections.forEach((detection, i) => {
+                // Cari kecocokan deskriptor wajah ini dengan database kita
+                const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+                
+                // Box koordinat wajah
+                const box = detection.detection.box;
+                
+                // Styling box berdasarkan hasil kecocokan
+                let boxColor = '#ef4444'; // Red (Unknown)
+                let labelText = 'Tidak Dikenal';
+                
+                if (bestMatch.label !== 'unknown') {
+                    boxColor = '#10b981'; // Emerald (Match)
+                    matchFoundCount++;
+                    
+                    // Hitung persentase kecerdasan (distance 0 = 100% mirip, 0.6 threshold = batas bawah)
+                    // Rumus sederhana untuk display:
+                    const distance = bestMatch.distance;
+                    let confidence = 0;
+                    if(distance < 0.6) {
+                        confidence = Math.round((1 - (distance / 0.6) * 0.5) * 100); 
+                    }
+                    
+                    labelText = `${bestMatch.label} (${confidence}%)`;
+                    summaryHTML += `<li class="flex items-start gap-2"><span class="text-emerald-500 mt-1">✓</span><span><b>Wajah ${i+1}:</b> Cocok dengan target <b>${bestMatch.label}</b> (Tingkat Keyakinan: ~${confidence}%)</span></li>`;
+                } else {
+                    summaryHTML += `<li class="flex items-start gap-2"><span class="text-red-500 mt-1">✗</span><span><b>Wajah ${i+1}:</b> Tidak cocok dengan target mana pun di database.</span></li>`;
+                }
+
+                // Gambar kotak (bounding box)
+                const drawBox = new faceapi.draw.DrawBox(box, { 
+                    label: labelText, 
+                    boxColor: boxColor,
+                    lineWidth: 3
+                });
+                drawBox.draw(overlay);
+            });
+
+            summaryHTML += `</ul>`;
+
+            // Tampilkan rangkuman
+            if (matchFoundCount > 0) {
+                showSummaryMessage(`Ditemukan ${matchFoundCount} Kecocokan`, summaryHTML, 'success');
+            } else {
+                showSummaryMessage('Tidak Ada Kecocokan', summaryHTML, 'warning');
+            }
+        }
+
+        function showSummaryMessage(title, contentHTML, type = 'info') {
+            resultSummary.classList.remove('hidden');
+            resultSummary.className = `p-6 rounded-xl border mt-6 ${
+                type === 'success' ? 'bg-emerald-50 border-emerald-200' : 
+                type === 'warning' ? 'bg-orange-50 border-orange-200' : 
+                'bg-slate-50 border-slate-200'
+            }`;
+            
+            const titleColor = type === 'success' ? 'text-emerald-800' : type === 'warning' ? 'text-orange-800' : 'text-slate-800';
+            
+            resultSummary.innerHTML = `
+                <h3 class="text-lg font-semibold ${titleColor} mb-3 flex items-center gap-2">
+                    ${type === 'success' ? '🚨 Target Ditemukan!' : title}
+                </h3>
+                <div class="text-sm text-slate-700">
+                    ${contentHTML}
+                </div>
+            `;
+        }
+
+        function resetUIForNewImage() {
+            const ctx = overlay.getContext('2d');
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+            resultSummary.classList.add('hidden');
+            resultSummary.innerHTML = '';
+            resetBtn.classList.add('hidden');
+        }
+
+        resetBtn.addEventListener('click', () => {
+            imageUpload.value = ''; // Reset input file
+            resetUIForNewImage();
+            imageViewerContainer.classList.add('hidden');
+            viewerPlaceholder.classList.remove('hidden');
+            resetBtn.classList.add('hidden');
+        });
+
+        // Inisialisasi saat script dimuat
+        document.addEventListener('DOMContentLoaded', () => {
+            // Tunggu sampai object faceapi tersedia (karena load dari CDN dengan defer)
+            const checkFaceApi = setInterval(() => {
+                if (typeof faceapi !== 'undefined') {
+                    clearInterval(checkFaceApi);
+                    loadModels();
+                }
+            }, 100);
+        });
+
+    </script>
+</body>
+</html>
