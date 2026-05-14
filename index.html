@@ -206,12 +206,12 @@
         const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
 
         // Data Mock: Daftar orang hilang yang disimulasikan
-        // Kita menggunakan gambar placeholder publik dengan label tertentu
+        // Menggunakan gambar test dari repositori face-api yang memiliki dukungan CORS yang baik
         const mockLabels = [
-            { name: "Andi Saputra", url: "https://xsgames.co/randomusers/assets/avatars/male/1.jpg" },
-            { name: "Budi Santoso", url: "https://xsgames.co/randomusers/assets/avatars/male/10.jpg" },
-            { name: "Siti Aminah", url: "https://xsgames.co/randomusers/assets/avatars/female/5.jpg" },
-            { name: "Dewi Lestari", url: "https://xsgames.co/randomusers/assets/avatars/female/12.jpg" }
+            { name: "Andi Saputra", url: "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/images/sheldon.jpeg" },
+            { name: "Budi Santoso", url: "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/images/howard.jpeg" },
+            { name: "Siti Aminah", url: "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/images/penny.jpeg" },
+            { name: "Deni Pratama", url: "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/images/raj.jpeg" }
         ];
 
         async function loadModels() {
@@ -242,20 +242,26 @@
             
             for (const person of mockLabels) {
                 try {
-                    // Tampilkan di UI Panel Kiri
-                    const imgEl = document.createElement('img');
-                    imgEl.src = person.url;
-                    imgEl.alt = person.name;
-                    imgEl.title = person.name;
-                    imgEl.className = "w-full aspect-square object-cover rounded-md border border-slate-200";
-                    imgEl.crossOrigin = "anonymous"; // Penting untuk mencegah error CORS saat menggambar ke canvas
-                    mockDatabaseImages.appendChild(imgEl);
-
-                    // Buat image HTML element dari URL untuk diproses face-api
-                    const img = await faceapi.fetchImage(person.url);
+                    // Buat elemen gambar
+                    const imgEl = new Image();
+                    imgEl.crossOrigin = "anonymous"; // Penting untuk mencegah error CORS saat menggambar ke canvas/diproses
                     
-                    // Deteksi wajah tunggal dan ekstrak deskriptor (fitur wajah berbentuk array angka)
-                    const detections = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                    // Tunggu gambar selesai dimuat sebelum diproses
+                    await new Promise((resolve, reject) => {
+                        imgEl.onload = resolve;
+                        imgEl.onerror = () => reject(new Error('Gambar gagal dimuat'));
+                        imgEl.src = person.url;
+                    });
+
+                    // Tampilkan di UI Panel Kiri
+                    const displayImg = imgEl.cloneNode();
+                    displayImg.alt = person.name;
+                    displayImg.title = person.name;
+                    displayImg.className = "w-full aspect-square object-cover rounded-md border border-slate-200";
+                    mockDatabaseImages.appendChild(displayImg);
+
+                    // Deteksi wajah tunggal dan ekstrak deskriptor langsung dari elemen gambar HTML
+                    const detections = await faceapi.detectSingleFace(imgEl).withFaceLandmarks().withFaceDescriptor();
                     
                     if (detections) {
                         // Simpan label dan deskriptor
