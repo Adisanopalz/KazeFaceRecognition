@@ -206,12 +206,12 @@
         const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
 
         // Data Mock: Daftar orang hilang yang disimulasikan
-        // Menggunakan gambar test dari repositori face-api yang memiliki dukungan CORS yang baik
+        // Menggunakan GitHub Avatars publik yang dijamin stabil dan mendukung CORS sepenuhnya
         const mockLabels = [
-            { name: "Andi Saputra", url: "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/images/sheldon.jpeg" },
-            { name: "Budi Santoso", url: "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/images/howard.jpeg" },
-            { name: "Siti Aminah", url: "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/images/penny.jpeg" },
-            { name: "Deni Pratama", url: "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/images/raj.jpeg" }
+            { name: "Tom P. (Target 1)", url: "https://avatars.githubusercontent.com/u/1?v=4" },
+            { name: "Yehuda K. (Target 2)", url: "https://avatars.githubusercontent.com/u/4?v=4" },
+            { name: "Chris W. (Target 3)", url: "https://avatars.githubusercontent.com/u/17?v=4" },
+            { name: "Ben S. (Target 4)", url: "https://avatars.githubusercontent.com/u/81?v=4" }
         ];
 
         async function loadModels() {
